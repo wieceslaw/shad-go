@@ -90,7 +90,7 @@ deadlines:
           score: 100
         - task: once # completed
           score: 100
-        - task: rwmutex
+        - task: rwmutex # completed
           score: 100
         - task: waitgroup
           score: 100
