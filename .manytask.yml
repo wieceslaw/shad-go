@@ -67,13 +67,13 @@ deadlines:
         0.3: 2025-03-09 23:59
       end: 2025-07-10 23:59
       tasks:
-        - task: otp
+        - task: otp # completed
           score: 100
-        - task: retryupdate
+        - task: retryupdate # completed
           score: 100
         - task: lrucache
           score: 100
-        - task: externalsort
+        - task: externalsort # completed
           score: 100
         - task: ciletters
           score: 100
