@@ -71,7 +71,7 @@ deadlines:
           score: 100
         - task: retryupdate # completed
           score: 100
-        - task: lrucache
+        - task: lrucache # completed
           score: 100
         - task: externalsort # completed
           score: 100
