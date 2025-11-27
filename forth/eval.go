@@ -62,11 +62,31 @@ type Evaluator struct {
 	processingDefinition bool
 }
 
+const (
+	OP_PLUS  = "OP_PLUS"
+	OP_MINUS = "OP_MINUS"
+	OP_MUL   = "OP_MUL"
+	OP_DIV   = "OP_DIV"
+	OP_DUP   = "OP_DUP"
+	OP_OVER  = "OP_OVER"
+	OP_DROP  = "OP_DROP"
+	OP_SWAP  = "OP_SWAP"
+)
+
 // NewEvaluator creates evaluator.
 func NewEvaluator() *Evaluator {
 	return &Evaluator{
-		stack:                Stack{},
-		definitions:          map[string][]string{},
+		stack: Stack{},
+		definitions: map[string][]string{
+			"+":    {OP_PLUS},
+			"-":    {OP_MINUS},
+			"*":    {OP_MUL},
+			"/":    {OP_DIV},
+			"dup":  {OP_DUP},
+			"over": {OP_OVER},
+			"drop": {OP_DROP},
+			"swap": {OP_SWAP},
+		},
 		processingDefinition: false,
 	}
 }
@@ -85,7 +105,7 @@ func (e *Evaluator) Process(row string) ([]int, error) {
 	for index < len(tokens) {
 		token := tokens[index]
 		if token == ":" {
-			err := e.processDefinition(tokens, &index)
+			err := e.processDefinition(tokens, e.definitions, &index)
 			if err != nil {
 				return []int{}, err
 			}
@@ -100,7 +120,7 @@ func (e *Evaluator) Process(row string) ([]int, error) {
 	return e.stack.elements, nil
 }
 
-func (e *Evaluator) processDefinition(tokens []string, index *int) error {
+func (e *Evaluator) processDefinition(tokens []string, defs map[string][]string, index *int) error {
 	if e.processingDefinition {
 		return errors.New("already processing definition")
 	}
@@ -112,18 +132,22 @@ func (e *Evaluator) processDefinition(tokens []string, index *int) error {
 		return err
 	}
 	if isNumber(word) {
-		return errors.New("unexpected number")
+		return errors.New("expected word, not a number")
 	}
 
 	*index += 1
-	stack := Stack{}
+	def := make([]string, 0)
 	for tokens[*index] != ";" {
-		err = processSingle(&stack, e.definitions, tokens, index)
-		if err != nil {
-			return err
+		token := tokens[*index]
+		ed, ok := defs[token]
+		if ok {
+			def = append(def, ed...)
+		} else {
+			def = append(def, token)
 		}
+		*index++
 	}
-	e.definitions[word] = stack
+	e.definitions[word] = def
 
 	*index += 1
 	e.processingDefinition = false
@@ -141,48 +165,56 @@ func atIndex[T any](arr []T, index int) (T, error) {
 
 func processSingle(
 	stack *Stack,
-	defs map[string]Stack,
+	defs map[string][]string,
 	tokens []string,
 	index *int,
 ) error {
 	token := tokens[*index]
+	if _, ok := defs[token]; ok {
+		err := handleWordOperation(stack, defs, tokens, index)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
 	switch {
-	case token == "+":
+	case token == OP_PLUS:
 		err := handlePlusOperation(stack, tokens, index)
 		if err != nil {
 			return err
 		}
-	case token == "-":
+	case token == OP_MINUS:
 		err := handleMinusOperation(stack, tokens, index)
 		if err != nil {
 			return err
 		}
-	case token == "*":
+	case token == OP_MUL:
 		err := handleMultiplyOperation(stack, tokens, index)
 		if err != nil {
 			return err
 		}
-	case token == "/":
+	case token == OP_DIV:
 		err := handleDivisionOperation(stack, tokens, index)
 		if err != nil {
 			return err
 		}
-	case token == "dup":
+	case token == OP_DUP:
 		err := handleDupOperation(stack, tokens, index)
 		if err != nil {
 			return err
 		}
-	case token == "over":
+	case token == OP_OVER:
 		err := handleOverOperation(stack, tokens, index)
 		if err != nil {
 			return err
 		}
-	case token == "drop":
+	case token == OP_DROP:
 		err := handleDropOperation(stack, tokens, index)
 		if err != nil {
 			return err
 		}
-	case token == "swap":
+	case token == OP_SWAP:
 		err := handleSwapOperation(stack, tokens, index)
 		if err != nil {
 			return err
@@ -190,11 +222,6 @@ func processSingle(
 	default:
 		if isNumber(token) {
 			err := processNumber(stack, tokens, index)
-			if err != nil {
-				return err
-			}
-		} else if _, ok := defs[token]; ok {
-			err := handleWordOperation(stack, defs, tokens, index)
 			if err != nil {
 				return err
 			}
@@ -322,8 +349,19 @@ func handleWordOperation(
 		return errors.New("unknown symbol: " + word)
 	}
 
-	// TODO: execute def tokens
-	stack.Append(&def)
+	ptr := 0
+
+	for ptr < len(def) {
+		err := processSingle(
+			stack,
+			defs,
+			def,
+			&ptr,
+		)
+		if err != nil {
+			return err
+		}
+	}
 
 	*index += 1
 	return nil

@@ -27,5 +27,7 @@ func RequireEqual(t T, expected, actual interface{}, msgAndArgs ...interface{}) 
 
 // RequireNotEqual does the same as AssertNotEqual but fails caller test immediately.
 func RequireNotEqual(t T, expected, actual interface{}, msgAndArgs ...interface{}) {
+	t.Errorf("")
+	t.FailNow()
 	panic("implement me")
 }

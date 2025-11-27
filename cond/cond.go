@@ -2,6 +2,10 @@
 
 package cond
 
+import (
+	"container/list"
+)
+
 // A Locker represents an object that can be locked and unlocked.
 type Locker interface {
 	Lock()
@@ -16,12 +20,18 @@ type Locker interface {
 // which must be held when changing the condition and
 // when calling the Wait method.
 type Cond struct {
-	L Locker
+	L     Locker
+	glock chan struct{}
+	list  *list.List
 }
 
 // New returns a new Cond with Locker l.
 func New(l Locker) *Cond {
-	return &Cond{L: l}
+	return &Cond{
+		L:     l,
+		glock: make(chan struct{}, 1),
+		list:  list.New(),
+	}
 }
 
 // Wait atomically unlocks c.L and suspends execution
@@ -33,15 +43,27 @@ func New(l Locker) *Cond {
 // typically cannot assume that the condition is true when
 // Wait returns. Instead, the caller should Wait in a loop:
 //
-//    c.L.Lock()
-//    for !condition() {
-//        c.Wait()
-//    }
-//    ... make use of condition ...
-//    c.L.Unlock()
-//
+//	c.L.Lock()
+//	for !condition() {
+//	    c.Wait()
+//	}
+//	... make use of condition ...
+//	c.L.Unlock()
 func (c *Cond) Wait() {
+	c.L.Unlock()
+	defer c.L.Lock()
 
+	ch := c.addWait()
+	<-ch // wait
+}
+
+func (c *Cond) addWait() chan struct{} {
+	c.glock <- struct{}{}
+	defer func() { <-c.glock }()
+
+	ch := make(chan struct{}, 1)
+	c.list.PushBack(ch)
+	return ch
 }
 
 // Signal wakes one goroutine waiting on c, if there is any.
@@ -49,7 +71,16 @@ func (c *Cond) Wait() {
 // It is allowed but not required for the caller to hold c.L
 // during the call.
 func (c *Cond) Signal() {
+	c.glock <- struct{}{}
+	defer func() { <-c.glock }()
 
+	if c.list.Len() == 0 {
+		return
+	}
+	el := c.list.Front()
+	ch := el.Value.(chan struct{})
+	ch <- struct{}{}
+	c.list.Remove(c.list.Front())
 }
 
 // Broadcast wakes all goroutines waiting on c.
@@ -57,5 +88,13 @@ func (c *Cond) Signal() {
 // It is allowed but not required for the caller to hold c.L
 // during the call.
 func (c *Cond) Broadcast() {
+	c.glock <- struct{}{}
+	defer func() { <-c.glock }()
 
+	for c.list.Len() != 0 {
+		el := c.list.Front()
+		ch := el.Value.(chan struct{})
+		ch <- struct{}{}
+		c.list.Remove(c.list.Front())
+	}
 }
